@@ -70,8 +70,8 @@ services:
     environment:
     # if you want to run skyvern on a remote server,
     # you need to change the host in VITE_WSS_BASE_URL and VITE_API_BASE_URL to match your server ip
-      - SERVICE_FQDN_SKYVERNAPI_8080
-      - SERVICE_FQDN_SKYVERNAPI_9090
+      - SERVICE_FQDN_SKYVERN_8080
+      - SERVICE_FQDN_SKYVERNASSETS_9090
       - VITE_WSS_BASE_URL=${VITE_WSS_BASE_URL}
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
       - VITE_ARTIFACT_API_BASE_URL=${VITE_ARTIFACT_API_BASE_URL}
