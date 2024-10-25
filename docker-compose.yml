@@ -71,6 +71,7 @@ services:
     # you need to change the host in VITE_WSS_BASE_URL and VITE_API_BASE_URL to match your server ip
       - VITE_WSS_BASE_URL=${VITE_WSS_BASE_URL}
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_ARTIFACT_API_BASE_URL=${VITE_ARTIFACT_API_BASE_URL}
     #   - VITE_SKYVERN_API_KEY=
     depends_on:
       skyvern:
