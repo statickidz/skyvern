@@ -768,6 +768,8 @@ async def handle_select_option_action(
         LOG.info(
             "SelectOptionAction is on <select>",
             action=action,
+            task_id=task.task_id,
+            step_id=step.step_id,
         )
         return await normal_select(action=action, skyvern_element=skyvern_element)
 
@@ -775,6 +777,8 @@ async def handle_select_option_action(
         LOG.info(
             "SelectOptionAction is on <input> checkbox",
             action=action,
+            task_id=task.task_id,
+            step_id=step.step_id,
         )
         check_action = CheckboxAction(element_id=action.element_id, is_checked=True)
         return await handle_checkbox_action(check_action, page, scraped_page, task, step)
@@ -783,6 +787,19 @@ async def handle_select_option_action(
         LOG.info(
             "SelectOptionAction is on <input> radio",
             action=action,
+            task_id=task.task_id,
+            step_id=step.step_id,
+        )
+        click_action = ClickAction(element_id=action.element_id)
+        return await chain_click(task, scraped_page, page, click_action, skyvern_element)
+
+    # FIXME: maybe there's a case where <input type="button"> could trigger dropdown menu?
+    if await skyvern_element.is_btn_input():
+        LOG.info(
+            "SelectOptionAction is on <input> button",
+            action=action,
+            task_id=task.task_id,
+            step_id=step.step_id,
         )
         click_action = ClickAction(element_id=action.element_id)
         return await chain_click(task, scraped_page, page, click_action, skyvern_element)
@@ -822,6 +839,22 @@ async def handle_select_option_action(
         incremental_element = await incremental_scraped.get_incremental_element_tree(
             clean_and_remove_element_tree_factory(task=task, step=step, check_exist_funcs=[dom.check_id_in_dom]),
         )
+
+        if len(incremental_element) == 0 and skyvern_element.get_tag_name() == InteractiveElement.INPUT:
+            LOG.info(
+                "No incremental elements detected for the input element, trying to press Arrowdown to trigger the dropdown",
+                element_id=skyvern_element.get_id(),
+                task_id=task.task_id,
+                step_id=step.step_id,
+            )
+            await skyvern_element.scroll_into_view()
+            await skyvern_element.press_key("ArrowDown")
+            # wait 5s for options to load
+            await asyncio.sleep(5)
+            incremental_element = await incremental_scraped.get_incremental_element_tree(
+                clean_and_remove_element_tree_factory(task=task, step=step, check_exist_funcs=[dom.check_id_in_dom]),
+            )
+
         if len(incremental_element) == 0:
             raise NoIncrementalElementFoundForCustomSelection(element_id=action.element_id)
 
@@ -1685,8 +1718,10 @@ async def select_from_dropdown(
         task_id=task.task_id,
     )
 
+    action_type: str = json_response.get("action_type", "")
+    action_type = action_type.upper()
     element_id: str | None = json_response.get("id", None)
-    if not element_id:
+    if not element_id or action_type not in ["CLICK", "INPUT_TEXT"]:
         raise NoAvailableOptionFoundForCustomSelection(reason=json_response.get("reasoning"))
 
     if not force_select and target_value:
@@ -1697,6 +1732,29 @@ async def select_from_dropdown(
                 task_id=task.task_id,
                 step_id=step.step_id,
             )
+            return single_select_result
+
+    if value is not None and action_type == "INPUT_TEXT":
+        LOG.info(
+            "No clickable option found, but found input element to search",
+            element_id=element_id,
+            task_id=task.task_id,
+            step_id=step.step_id,
+        )
+        try:
+            input_element = await SkyvernElement.create_from_incremental(incremental_scraped, element_id)
+            await input_element.scroll_into_view()
+            current_text = await get_input_value(input_element.get_tag_name(), input_element.get_locator())
+            if current_text == value:
+                single_select_result.action_result = ActionSuccess()
+                return single_select_result
+
+            await input_element.input_clear()
+            await input_element.input_sequentially(value)
+            single_select_result.action_result = ActionSuccess()
+            return single_select_result
+        except Exception as e:
+            single_select_result.action_result = ActionFailure(exception=e)
             return single_select_result
 
     try:
